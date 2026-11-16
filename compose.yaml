@@ -1,0 +1,60 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: gridmind
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-only-gridmind}
+      POSTGRES_DB: gridmind
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gridmind"]
+      interval: 5s
+      retries: 20
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes: ["redisdata:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 20
+  api:
+    build: ./backend
+    environment: &api-env
+      DATABASE_URL: postgresql+psycopg://gridmind:${POSTGRES_PASSWORD:-local-only-gridmind}@postgres:5432/gridmind
+      REDIS_URL: redis://redis:6379/0
+      JOB_MODE: redis
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-}
+      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:3000}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    ports: ["127.0.0.1:8000:8000"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 5s
+      retries: 30
+      start_period: 20s
+  worker:
+    build: ./backend
+    command: rq worker --url redis://redis:6379/0 default
+    environment: *api-env
+    depends_on:
+      api: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "from redis import Redis; from rq import Worker; assert any(w.last_heartbeat for w in Worker.all(connection=Redis.from_url('redis://redis:6379/0')))"]
+      interval: 30s
+      retries: 3
+  web:
+    build: ./frontend
+    ports: ["127.0.0.1:3000:3000"]
+    depends_on:
+      api: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      retries: 20
+volumes:
+  pgdata:
+  redisdata:
