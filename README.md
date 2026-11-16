@@ -4,6 +4,8 @@
 
 A local energy engineering application that connects factory demand, rooftop solar, battery storage and time-of-use tariffs. Forecasts, dispatch schedules, savings and outage results come from backend calculations. No paid APIs or external hardware are required.
 
+![GRIDMIND control center](https://raw.githubusercontent.com/jeelthacker1/gridmind/main/docs/control-center.png)
+
 ## Run locally
 
 Install Docker Desktop with the Linux engine running, then:
